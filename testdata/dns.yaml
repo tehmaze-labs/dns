@@ -1,0 +1,101 @@
+---
+templates:
+  geo_eu: &geo_eu
+  - {type: "A",    ttl: 60,   content: "82.139.110.195"}
+  - {type: "A",    ttl: 60,   content: "149.210.161.112"}
+  - {type: "AAAA", ttl: 60,   content: "2a01:7c8:aab4:42c::1"}
+  geo_eu_zone: &geo_eu_zone
+  - {type: "NS",   ttl: 3600, content: "dns1.maze.io"}
+  - {type: "NS",   ttl: 3600, content: "dns2.maze.io"}
+  - {type: "NS",   ttl: 3600, content: "dns3.maze.io"}
+  - {type: "MX",   ttl: 3600, content: "alai.maze.io", prio: 23}
+  - {type: "MX",   ttl: 3600, content: "zeck.maze.io", prio: 31}
+  - {type: "MX",   ttl: 3600, content: "dink.maze.io", prio: 42}
+  - {type: "A",    ttl: 60,   content: "82.139.110.195"}
+  - {type: "A",    ttl: 60,   content: "149.210.161.112"}
+  - {type: "AAAA", ttl: 60,   content: "2a01:7c8:aab4:42c::1"}
+  geo_us: &geo_us
+  - {type: "A",    ttl: 60,   content: "69.28.91.239"}
+  - {type: "A",    ttl: 60,   content: "104.131.16.224"}
+  - {type: "AAAA", ttl: 60,   content: "2604:a880:800:10::fb:d001"}
+  geo_us_zone: &geo_us_zone
+  - {type: "NS",   ttl: 3600, content: "dns1.maze.io"}
+  - {type: "NS",   ttl: 3600, content: "dns2.maze.io"}
+  - {type: "NS",   ttl: 3600, content: "dns3.maze.io"}
+  - {type: "MX",   ttl: 3600, content: "alai.maze.io", prio: 23}
+  - {type: "MX",   ttl: 3600, content: "zeck.maze.io", prio: 31}
+  - {type: "MX",   ttl: 3600, content: "dink.maze.io", prio: 42}
+  - {type: "A",    ttl: 60,   content: "69.28.91.239"}
+  - {type: "A",    ttl: 60,   content: "104.131.16.224"}
+  - {type: "AAAA", ttl: 60,   content: "2604:a880:800:10::fb:d001"}
+
+resolver:
+  auto:
+    - options:
+      encode: base36
+      filler: true
+      prefix: "node-"
+      suffix: ""
+      soa: "dns1.maze.io systems-dns.maze.io 86400 7200 604800 60"
+      dns:
+      - dns1.maze.io
+      - dns2.maze.io
+      - dns3.maze.io
+      answers:
+        '172.23.40.0/24':
+          zone: pub.auto.maze.so
+          suffix: '-4'
+        '2001:470:d510:40::/64':
+          zone: pub.auto.maze.so
+          suffix: '-6'
+        '172.23.41.0/24':
+          zone: int.auto.maze.so
+          suffix: '-4'
+        '2001:470:d510:41::/64':
+          zone: int.auto.maze.so
+          suffix: '-6'
+        '172.23.42.0/24':
+          zone: lab.auto.maze.so
+          suffix: '-4'
+        '2001:470:d510:42::/64':
+          zone: lab.auto.maze.so
+          suffix: '-6'
+        '172.23.43.0/24':
+          zone: foo.auto.maze.so
+          suffix: '-4'
+        '2001:470:d510:43::/64':
+          zone: foo.auto.maze.so
+          suffix: '-6'
+
+  geo:
+    - zones:
+      - apt.maze.io
+      - cdn.maze.io
+      - www.spacephone.org
+      - www.pd0mz.nl
+      options:
+        database: /usr/share/GeoIP/GeoLite2-Country.mmdb
+        answers:
+          continent:
+            af: *geo_eu
+            an: *geo_us
+            as: *geo_eu
+            eu: *geo_eu
+            na: *geo_us
+            oc: *geo_us
+            sa: *geo_us
+
+    - zones:
+      - spacephone.org
+      - pd0mz.nl
+      options:
+        database: /usr/share/GeoIP/GeoLite2-Country.mmdb
+        answers:
+          continent:
+            af: *geo_eu_zone
+            an: *geo_us_zone
+            as: *geo_eu_zone
+            eu: *geo_eu_zone
+            na: *geo_us_zone
+            oc: *geo_us_zone
+            sa: *geo_us_zone
