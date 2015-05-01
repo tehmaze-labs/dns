@@ -1,4 +1,4 @@
-package pdns
+package main
 
 import (
 	"bufio"
