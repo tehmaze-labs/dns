@@ -101,14 +101,21 @@ func (e *EUI64) Decode(src string) (out []byte, err error) {
 }
 
 func (e *EUI64) Encode(src []byte) (out string, err error) {
+	if src == nil {
+		return "", fmt.Errorf("Not a valid EUI64 address, input nil")
+	}
 	if len(src) < 8 {
-		return "", errors.New("Not a valid EUI64 address")
+		return "", fmt.Errorf("Not a valid EUI64 address, input too %d short", len(src))
+	}
+
+	// We're only interested in the last 8 octets
+	for len(src) > 8 {
+		src = src[1:]
 	}
 
 	// Test to see if this is an EUI64 address
 	a := binary.BigEndian.Uint64(src)
 	if a&0xfffe000000 == 0 {
-		log.Printf("eui64 encode: not an EUI64 address %032x\n", a)
 		return "", errors.New("Not a valid EUI64 address")
 	}
 
@@ -152,7 +159,6 @@ func (e *EUI64) ParseOUI(filename string) error {
 }
 
 func (e *EUI64) Vendor(oui string) string {
-	log.Printf("eui64: looking up vendor for %q", oui)
 	var v = ""
 	if len(oui) >= 3 {
 		v = e.vendors[oui[:6]]

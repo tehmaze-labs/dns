@@ -25,6 +25,11 @@ func (e *Base32) Config(opt map[string]interface{}) (err error) {
 }
 
 func (e *Base32) Encode(src []byte) (out string, err error) {
+	// Trim left zero bytes
+	for len(src) > 0 && src[0] == 0x00 {
+		src = src[1:]
+	}
+
 	out = base32.HexEncoding.EncodeToString(src)
 	out = strings.TrimRight(out, "\x00=")
 	out = strings.ToLower(out)

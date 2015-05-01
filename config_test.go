@@ -9,14 +9,14 @@ func TestNewConfig(t *testing.T) {
 		return
 	}
 
-	r, err := c.Resolvers()
+	r, err := c.Backends()
 	if err != nil {
 		t.Error(err)
 		return
 	}
 
-	t.Logf("got %d resolvers", len(r))
+	t.Logf("got %d backends", len(r))
 	for k, v := range r {
-		t.Logf("resolver %q: %v", k, v)
+		t.Logf("backend %q: %v", k, v)
 	}
 }
