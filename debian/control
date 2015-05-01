@@ -6,8 +6,7 @@ Build-Depends: debhelper (>= 8.0.0),
                dh-golang,
                golang-pq-dev,
                golang-go,
-               golang-godebiancontrol-dev,
-               golang-codesearch-dev
+               golang-godebiancontrol-dev
 Standards-Version: 3.9.2
 #Vcs-Git: git://git.debian.org/collab-maint/dcs.git
 #Vcs-Browser: http://git.debian.org/?p=collab-maint/dcs.git;a=summary

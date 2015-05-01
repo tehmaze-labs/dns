@@ -1,8 +1,32 @@
 #!/usr/bin/make -f
 
+# Uncomment this to turn on verbose mode.
+export DH_VERBOSE=1
+
+
 export DH_OPTIONS
 
+# DH_GOPKG is the upstream path which you would normally “go get”.
+# Using it allows us to build applications without patching locations.
 export DH_GOPKG := github.com/tehmaze-labs/dns
+
+
+override_dh_auto_build:
+	go get -v github.com/miekg/dns
+	go get -v gopkg.in/yaml.v2
+	go get -v github.com/oschwald/geoip2-golang
+	go install -v $(DH_GOPKG)
+
+override_dh_auto_install:
+	dh_auto_install
+	mkdir -p debian/tmp/usr/lib/maze
+	install -m0755 $$GOPATH/bin/dns debian/tmp/usr/lib/maze/dns
+	mkdir -p debian/tmp/var/lib/maze
+	install -m0644 testdata/oui.txt debian/tmp/var/lib/maze/oui.txt
+	mkdir -p debian/tmp/etc/powerdns
+	install -m0644 testdata/dns.yaml debian/tmp/etc/powerdns/dns.yaml.example
+
+override_dh_auto_test:
 
 %:
 	dh $@ --buildsystem=golang --with=golang
