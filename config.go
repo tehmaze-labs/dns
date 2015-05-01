@@ -28,17 +28,23 @@ func NewConfig(filename string) (c *Config, err error) {
 	return
 }
 
-func (c *Config) Backends() (rs []backend.Backend, err error) {
-	rs = make([]backend.Backend, 0)
+func (c *Config) Backends() (bs []backend.Backend, err error) {
+	bs = make([]backend.Backend, 0)
 
-	for _, r := range c.Backend.AutoBackends {
-		if err = r.Check(); err != nil {
-			return
+	for _, b := range c.Backend.AutoBackends {
+		if err = b.Check(); err != nil {
+			return nil, err
 		}
-		rs = append(rs, r)
+		bs = append(bs, b)
+	}
+	for _, b := range c.Backend.GeoBackends {
+		if err = b.Check(); err != nil {
+			return nil, err
+		}
+		bs = append(bs, b)
 	}
 
-	if len(rs) == 0 {
+	if len(bs) == 0 {
 		return nil, errors.New("no backends configured")
 	}
 

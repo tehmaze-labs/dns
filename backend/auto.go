@@ -154,7 +154,6 @@ func (r *AutoBackend) queryForward(m *message.Message, accept func(ip net.IP) bo
 			continue
 		}
 		name = strings.TrimSuffix(name, answer.Suffix)
-		log.Printf("auto: forward %s (stripped)", name)
 		for _, encoder := range answer.encoders {
 			d, err := encoder.Decode(name)
 			if err != nil {
@@ -167,7 +166,7 @@ func (r *AutoBackend) queryForward(m *message.Message, accept func(ip net.IP) bo
 			if !accept(ip) {
 				continue
 			}
-			log.Printf("auto: forward request to %s", net.IP(ip))
+			log.Printf("auto: forward %q resolved to %s", name, net.IP(ip))
 			p := &message.Message{
 				Name:  m.Name,
 				Class: dns.ClassINET,
@@ -254,7 +253,6 @@ func (r *AutoBackend) queryPTR(m *message.Message) (rs []*message.Message, err e
 			if content == "" || err != nil {
 				continue
 			}
-			log.Printf("auto: %T(%v) encoder created: %q", encoder, ipb.Bytes(), content)
 			break
 		}
 
@@ -270,7 +268,6 @@ func (r *AutoBackend) queryPTR(m *message.Message) (rs []*message.Message, err e
 }
 
 func isCanonicalIPv4(ip net.IP) bool {
-	log.Printf("canonical? %v", []byte(ip))
 	if ip.To16() == nil {
 		return false
 	}

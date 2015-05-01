@@ -43,24 +43,42 @@ func (r *GeoBackend) Check() (err error) {
 	r.Options.Default.Continent = strings.ToUpper(r.Options.Default.Continent)
 	r.Options.Default.Country = strings.ToUpper(r.Options.Default.Country)
 
-	for n, rr := range r.Options.Answers.Continent {
-		nu := strings.ToUpper(n)
-		if n != nu {
-			r.Options.Answers.Continent[nu] = rr
-			delete(r.Options.Answers.Continent, n)
-			n = nu
-		}
+	if err = r.checkAnswers(r.Options.Answers.Continent); err != nil {
+		return
 	}
-	for n, rr := range r.Options.Answers.Country {
-		nu := strings.ToUpper(n)
-		if n != nu {
-			r.Options.Answers.Country[nu] = rr
-			delete(r.Options.Answers.Country, n)
-			n = nu
-		}
+	if err = r.checkAnswers(r.Options.Answers.Country); err != nil {
+		return
 	}
 
 	return nil
+}
+
+func (r *GeoBackend) checkAnswers(answers map[string][]*Record) (err error) {
+	if answers == nil {
+		return
+	}
+	for n, a := range answers {
+		nu := strings.ToUpper(n)
+		if n != nu {
+			answers[nu] = a
+			delete(answers, n)
+			n = nu
+		}
+
+		// Basic record pre-flight checks
+		for _, r := range a {
+			if r.Class == "" {
+				r.Class = dns.ClassToString[dns.ClassINET]
+			}
+			if _, ok := dns.StringToClass[r.Class]; !ok {
+				return fmt.Errorf("Unknown class %q", r.Class)
+			}
+			if _, ok := dns.StringToType[r.Type]; !ok {
+				return fmt.Errorf("Unknown type %q", r.Type)
+			}
+		}
+	}
+	return
 }
 
 func (r *GeoBackend) Query(m *message.Message) (a []*message.Message, err error) {
