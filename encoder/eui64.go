@@ -7,12 +7,14 @@ import (
 	"encoding/binary"
 	"errors"
 	"fmt"
-	"net"
+	"log"
 	"os"
 	"regexp"
 	"strconv"
 	"strings"
 )
+
+const hexDigit = "0123456789abcdef"
 
 var vendorStrip = regexp.MustCompile(`[^- a-z0-9]`)
 var vendorDashes = regexp.MustCompile(`-[-]*`)
@@ -44,45 +46,35 @@ var vendorStopWords = map[string]bool{
 	"the":           true,
 }
 
-type EUI64Encoder struct {
-	fallback Encoder
-	vendors  map[string]string
+type EUI64 struct {
+	vendors map[string]string
 }
 
-func NewEUI64(fallback Encoder) *EUI64Encoder {
-	return &EUI64Encoder{fallback, map[string]string{}}
+func NewEUI64() *EUI64 {
+	return &EUI64{map[string]string{}}
 }
 
-func (e *EUI64Encoder) Encode(ip net.IP) string {
-	if _, _, err := net.ParseCIDR(ip.String() + "/64"); err != nil {
-		return ""
+func (e *EUI64) Config(opt map[string]interface{}) (err error) {
+	for k, v := range opt {
+		if k != "oui" {
+			return fmt.Errorf("Unknown eui64 option %q", k)
+		}
+
+		if filename, found := v.(string); found {
+			e.ParseOUI(filename)
+		}
 	}
 
-	n := binary.BigEndian.Uint64(ip[8:])
-
-	// Test to see if this is an EUI64 address
-	if n&0xfffe000000 == 0 {
-		if e.fallback != nil {
-			return e.fallback.Encode(ip)
-		}
-		return ""
-	}
-
-	ih := (n >> 40) ^ 0x020000
-	il := n & 0x00ffffff
-
-	return fmt.Sprintf("%02x-%02x-%02x-%02x-%02x-%02x",
-		(ih>>16)&0xff, (ih>>8)&0xff, ih&0xff,
-		(il>>16)&0xff, (il>>8)&0xff, il&0xff)
+	return
 }
 
-func (e *EUI64Encoder) Decode(s string) (ip net.IP, err error) {
-	p := strings.SplitN(s, "-", 6)
-	if len(p) != 6 {
-		if e.fallback != nil {
-			return e.fallback.Decode(s)
-		}
+func (e *EUI64) Decode(src string) (out []byte, err error) {
+	p := strings.Split(src, "-")
+	if len(p) < 6 {
 		return nil, errors.New("No encoded OUI found")
+	}
+	for len(p) > 6 {
+		p = p[1:]
 	}
 
 	var i, ih, il uint64
@@ -90,9 +82,6 @@ func (e *EUI64Encoder) Decode(s string) (ip net.IP, err error) {
 	for j := 0; j < 6; j++ {
 		k, err := strconv.ParseUint(p[j], 16, 8)
 		if err != nil {
-			if e.fallback != nil {
-				return e.fallback.Decode(s)
-			}
 			return nil, err
 		}
 		i = (i << 8) | k
@@ -100,19 +89,45 @@ func (e *EUI64Encoder) Decode(s string) (ip net.IP, err error) {
 
 	ih = (i >> 24) ^ 0x20000
 	il = (i & 0xffffff)
-	ip = make([]byte, 16)
-	ip[0x08] = uint8(ih >> 16)
-	ip[0x09] = uint8(ih >> 8)
-	ip[0x0a] = uint8(ih)
-	ip[0x0b] = 0xff
-	ip[0x0c] = 0xfe
-	ip[0x0d] = uint8(il >> 16)
-	ip[0x0e] = uint8(il >> 8)
-	ip[0x0f] = uint8(il)
-	return ip, nil
+	out = append(out, uint8(ih>>16))
+	out = append(out, uint8(ih>>8))
+	out = append(out, uint8(ih))
+	out = append(out, 0xff)
+	out = append(out, 0xfe)
+	out = append(out, uint8(il>>16))
+	out = append(out, uint8(il>>8))
+	out = append(out, uint8(il))
+	return out, nil
 }
 
-func (e *EUI64Encoder) ParseOUI(filename string) error {
+func (e *EUI64) Encode(src []byte) (out string, err error) {
+	if len(src) < 8 {
+		return "", errors.New("Not a valid EUI64 address")
+	}
+
+	// Test to see if this is an EUI64 address
+	a := binary.BigEndian.Uint64(src)
+	if a&0xfffe000000 == 0 {
+		log.Printf("eui64 encode: not an EUI64 address %032x\n", a)
+		return "", errors.New("Not a valid EUI64 address")
+	}
+
+	ih := (a >> 40) ^ 0x020000
+	il := a & 0x00ffffff
+
+	buf := make([]byte, 12)
+	binary.BigEndian.PutUint64(buf, (ih<<20)|il)
+
+	return fmt.Sprintf("%s-%02x-%02x-%02x-%02x-%02x-%02x",
+		e.Vendor(fmt.Sprintf("%06x", ih)),
+		(ih>>16)&0xff, (ih>>8)&0xff, ih&0xff,
+		(il>>16)&0xff, (il>>8)&0xff, il&0xff), nil
+
+}
+
+func (e *EUI64) ParseOUI(filename string) error {
+	log.Printf("eui64: parsing %s\n", filename)
+
 	f, err := os.Open(filename)
 	if err != nil {
 		return err
@@ -129,18 +144,18 @@ func (e *EUI64Encoder) ParseOUI(filename string) error {
 
 		if _, err := fmt.Sscanf(line, "  %02x-%02x-%02x   (hex)\t\t", &oui[0], &oui[1], &oui[2]); err == nil {
 			com := (strings.Split(line, "\t"))[2]
-			e.vendors[string(oui)] = parseVendor(com)
-			fmt.Printf("%q -> %q\n", com, parseVendor(com))
+			e.vendors[fmt.Sprintf("%06x", oui)] = parseVendor(com)
 		}
 	}
 
 	return nil
 }
 
-func (e *EUI64Encoder) Vendor(oui string) string {
+func (e *EUI64) Vendor(oui string) string {
+	log.Printf("eui64: looking up vendor for %q", oui)
 	var v = ""
 	if len(oui) >= 3 {
-		v = e.vendors[oui[:3]]
+		v = e.vendors[oui[:6]]
 	}
 	if v == "" {
 		return "unknown"
@@ -165,15 +180,8 @@ func parseVendor(v string) string {
 	v = vendorDashes.ReplaceAllString(v, "-")
 	v = strings.Trim(v, "-")
 
-	// Hostnames can't start with a number
-	/*
-		if len(v) > 1 && v[0] >= '0' && v[0] <= '9' {
-			v = "x" + v
-		}
-	*/
-
 	return v
 }
 
 // Interface completeness validation
-var _ Encoder = (*EUI64Encoder)(nil)
+var _ = (*EUI64)(nil)

@@ -4,13 +4,13 @@ import (
 	"errors"
 	"io/ioutil"
 
-	"github.com/tehmaze-labs/dns/resolver"
+	"github.com/tehmaze-labs/dns/backend"
 	"gopkg.in/yaml.v2"
 )
 
 type Config struct {
-	Resolver  *resolver.ResolverConfig `yaml:"resolver"`
-	Templates interface{}              `yaml:"templates"`
+	Backend   *backend.BackendConfig `yaml:"backend"`
+	Templates interface{}            `yaml:"templates"`
 }
 
 func NewConfig(filename string) (c *Config, err error) {
@@ -28,15 +28,18 @@ func NewConfig(filename string) (c *Config, err error) {
 	return
 }
 
-func (c *Config) Resolvers() (rs []resolver.Resolver, err error) {
-	rs = make([]resolver.Resolver, 0)
+func (c *Config) Backends() (rs []backend.Backend, err error) {
+	rs = make([]backend.Backend, 0)
 
-	for _, r := range c.Resolver.AutoResolvers {
+	for _, r := range c.Backend.AutoBackends {
+		if err = r.Check(); err != nil {
+			return
+		}
 		rs = append(rs, r)
 	}
 
 	if len(rs) == 0 {
-		return nil, errors.New("no resolvers configured")
+		return nil, errors.New("no backends configured")
 	}
 
 	return

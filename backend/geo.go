@@ -1,4 +1,4 @@
-package resolver
+package backend
 
 import (
 	"fmt"
@@ -12,7 +12,7 @@ import (
 
 var continents = []string{"AF", "AS", "EU", "NA", "OC", "SA"}
 
-type GeoResolver struct {
+type GeoBackend struct {
 	Zones   []string `yaml:"zones"`
 	Options struct {
 		Database string `yaml:"database"`
@@ -29,7 +29,7 @@ type GeoResolver struct {
 	geoIP *geoip2.Reader
 }
 
-func (r *GeoResolver) Check() (err error) {
+func (r *GeoBackend) Check() (err error) {
 	r.geoIP, err = geoip2.Open(r.Options.Database)
 	if err != nil || r.geoIP == nil {
 		return fmt.Errorf("error reading GeoIP datbases %q: %v", r.Options.Database, err)
@@ -63,7 +63,7 @@ func (r *GeoResolver) Check() (err error) {
 	return nil
 }
 
-func (r *GeoResolver) Query(m *message.Message) (a []*message.Message, err error) {
+func (r *GeoBackend) Query(m *message.Message) (a []*message.Message, err error) {
 	if !stringInSlice(strings.ToLower(string(m.Name)), r.Zones) {
 		return nil, nil
 	}
@@ -147,4 +147,4 @@ func (r *GeoResolver) Query(m *message.Message) (a []*message.Message, err error
 }
 
 // Interface check
-var _ Resolver = (*GeoResolver)(nil)
+var _ Backend = (*GeoBackend)(nil)

@@ -29,10 +29,13 @@ templates:
   - {type: "A",    ttl: 60,   content: "104.131.16.224"}
   - {type: "AAAA", ttl: 60,   content: "2604:a880:800:10::fb:d001"}
 
-resolver:
+backend:
   auto:
     - options:
-      encode: base36
+      encode: 
+        eui64:
+          oui: ./testdata/oui.txt
+        base32:
       filler: true
       prefix: "node-"
       suffix: ""
@@ -45,24 +48,29 @@ resolver:
         '172.23.40.0/24':
           zone: pub.auto.maze.so
           suffix: '-4'
+          encode: {base32: }
         '2001:470:d510:40::/64':
           zone: pub.auto.maze.so
           suffix: '-6'
         '172.23.41.0/24':
           zone: int.auto.maze.so
           suffix: '-4'
+          encode: {base32: }
         '2001:470:d510:41::/64':
           zone: int.auto.maze.so
           suffix: '-6'
+          encode: {base32: }
         '172.23.42.0/24':
           zone: lab.auto.maze.so
           suffix: '-4'
+          encode: {base32: }
         '2001:470:d510:42::/64':
           zone: lab.auto.maze.so
           suffix: '-6'
         '172.23.43.0/24':
           zone: foo.auto.maze.so
           suffix: '-4'
+          encode: {base32: }
         '2001:470:d510:43::/64':
           zone: foo.auto.maze.so
           suffix: '-6'

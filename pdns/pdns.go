@@ -12,8 +12,8 @@ import (
 	"strings"
 
 	"github.com/miekg/dns"
+	"github.com/tehmaze-labs/dns/backend"
 	"github.com/tehmaze-labs/dns/message"
-	"github.com/tehmaze-labs/dns/resolver"
 )
 
 var (
@@ -30,7 +30,7 @@ const (
 )
 
 type Pdns struct {
-	resolvers []resolver.Resolver
+	backends []backend.Backend
 }
 
 type pdnsRequest struct {
@@ -38,8 +38,8 @@ type pdnsRequest struct {
 	message *message.Message
 }
 
-func New(resolvers []resolver.Resolver) *Pdns {
-	return &Pdns{resolvers}
+func New(backends []backend.Backend) *Pdns {
+	return &Pdns{backends}
 }
 
 func parseRequest(line []byte) (*pdnsRequest, error) {
@@ -91,7 +91,7 @@ func write(w io.Writer, line string) {
 }
 
 func (p *Pdns) Serve(r io.Reader, w io.Writer) {
-	log.Print("starting mazenet-pdns resolver")
+	log.Print("starting mazenet-pdns backend")
 	buf := bufio.NewReader(r)
 	handshake := true
 
@@ -101,7 +101,7 @@ func (p *Pdns) Serve(r io.Reader, w io.Writer) {
 			err = errors.New("pdns line too long")
 		}
 		if err == io.EOF {
-			log.Print("terminating mazenet-pdns resolver")
+			log.Print("terminating mazenet-pdns backend")
 			return
 		}
 		if err != nil {
@@ -161,10 +161,10 @@ func (p *Pdns) handleRequest(req *pdnsRequest) ([]*message.Message, error) {
 	}
 
 	messages := make([]*message.Message, 0, 16)
-	for _, resolver := range p.resolvers {
-		answers, err := resolver.Query(req.message)
+	for _, backend := range p.backends {
+		answers, err := backend.Query(req.message)
 		if err != nil {
-			log.Printf("resolver returned error: %v", err)
+			log.Printf("backend returned error: %v", err)
 		}
 		messages = append(messages, answers...)
 	}

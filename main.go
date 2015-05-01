@@ -2,6 +2,7 @@ package main
 
 import (
 	"flag"
+	"fmt"
 	"os"
 
 	"github.com/tehmaze-labs/dns/pdns"
@@ -10,15 +11,16 @@ import (
 func main() {
 	var config string
 
-	flag.StringVar(&config, "config", "testdata/dns.json", "configuration file")
+	flag.StringVar(&config, "config", "testdata/dns.yaml", "configuration file")
 	flag.Parse()
 
 	c, err := NewConfig(config)
 	if err != nil {
-		panic(err)
+		fmt.Printf("error parsing %q: %v\n", config, err)
+		os.Exit(1)
 	}
 
-	r, err := c.Resolvers()
+	r, err := c.Backends()
 	if err != nil {
 		panic(err)
 	}

@@ -1,0 +1,10 @@
+#!/usr/bin/make -f
+
+export DH_OPTIONS
+
+export DH_GOPKG := github.com/tehmaze-labs/dns
+
+%:
+	dh $@ --buildsystem=golang --with=golang
+
+
