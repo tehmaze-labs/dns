@@ -26,6 +26,10 @@ var (
 		dns.TypeANY:  true,
 		dns.TypeAAAA: true,
 	}
+	typesNS = map[uint16]bool{
+		dns.TypeANY: true,
+		dns.TypeNS:  true,
+	}
 	typesPTR = map[uint16]bool{
 		dns.TypeANY: true,
 		dns.TypePTR: true,
@@ -176,6 +180,12 @@ func (b *AutoBackend) Query(m *message.Message) (r []*message.Message, err error
 		}
 		r = b.merge(r, replies)
 	}
+	if typesNS[m.Type] {
+		if replies, err = b.queryNS(m); err != nil {
+			return
+		}
+		r = b.merge(r, replies)
+	}
 	if typesPTR[m.Type] {
 		if replies, err = b.queryPTR(m); err != nil {
 			return
@@ -199,10 +209,10 @@ func (b *AutoBackend) merge(r, replies []*message.Message) []*message.Message {
 	return r
 }
 
-func (r *AutoBackend) queryForward(m *message.Message, accept func(ip net.IP) bool) (rs []*message.Message, err error) {
-	rs = make([]*message.Message, 0)
+func (b *AutoBackend) queryForward(m *message.Message, accept func(ip net.IP) bool) (r []*message.Message, err error) {
+	r = make([]*message.Message, 0)
 
-	for _, answer := range r.Answers {
+	for _, answer := range b.Answers {
 		name := string(m.Name)
 		if !strings.HasSuffix(name, "."+answer.Zone) {
 			continue
@@ -228,7 +238,6 @@ func (r *AutoBackend) queryForward(m *message.Message, accept func(ip net.IP) bo
 			if !accept(ip) {
 				continue
 			}
-			log.Printf("auto: forward %q resolved to %s", name, net.IP(ip))
 			p := &message.Message{
 				Name:  m.Name,
 				Class: dns.ClassINET,
@@ -239,34 +248,60 @@ func (r *AutoBackend) queryForward(m *message.Message, accept func(ip net.IP) bo
 			if ip.To4() != nil {
 				p.Type = dns.TypeA
 				p.Content = []byte(ip.String())
-				rs = append(rs, p)
+				r = append(r, p)
 			}
 			if len(ip) > 4 && ip.To16() != nil && !isCanonicalIPv4(ip) {
 				p.Type = dns.TypeAAAA
 				p.Content = []byte(ip.String())
-				rs = append(rs, p)
+				r = append(r, p)
 			}
 		}
 	}
 
-	return rs, nil
+	return
 }
 
-func (r *AutoBackend) queryA(m *message.Message) (rs []*message.Message, err error) {
-	return r.queryForward(m, func(ip net.IP) bool {
+func (b *AutoBackend) queryA(m *message.Message) (rs []*message.Message, err error) {
+	return b.queryForward(m, func(ip net.IP) bool {
 		return ip.To4() != nil
 	})
 }
 
-func (r *AutoBackend) queryAAAA(m *message.Message) (rs []*message.Message, err error) {
-	return r.queryForward(m, func(ip net.IP) bool {
-		return ip.To16() != nil
+func (b *AutoBackend) queryAAAA(m *message.Message) (rs []*message.Message, err error) {
+	return b.queryForward(m, func(ip net.IP) bool {
+		return ip.To16() != nil && !isCanonicalIPv4(ip)
 	})
 }
 
-func (r *AutoBackend) queryPTR(m *message.Message) (rs []*message.Message, err error) {
+func (b *AutoBackend) queryNS(m *message.Message) (r []*message.Message, err error) {
+	r = make([]*message.Message, 0)
+
+	var name = string(m.Name)
+	for _, answer := range b.Answers {
+		zone := ReverseNetwork(answer.Network)
+		if zone != name {
+			continue
+		}
+
+		for _, d := range answer.DNS {
+			p := &message.Message{
+				Name:    m.Name,
+				Class:   dns.ClassINET,
+				Type:    dns.TypeNS,
+				TTL:     int(answer.SOA.TTL),
+				ID:      m.ID,
+				Content: []byte(d),
+			}
+			r = append(r, p)
+		}
+		break
+	}
+
+	return r, nil
+}
+
+func (b *AutoBackend) queryPTR(m *message.Message) (r []*message.Message, err error) {
 	var ip net.IP
-	rs = make([]*message.Message, 0)
 	name := string(m.Name)
 
 	if strings.HasSuffix(name, ".ip6.arpa") {
@@ -292,8 +327,8 @@ func (r *AutoBackend) queryPTR(m *message.Message) (rs []*message.Message, err e
 		return nil, nil
 	}
 
-	log.Printf("auto: PTR for %s\n", ip)
-	for _, answer := range r.Answers {
+	r = make([]*message.Message, 0)
+	for _, answer := range b.Answers {
 		if answer.Network == nil || !answer.Network.Contains(ip) {
 			continue
 		}
@@ -323,10 +358,10 @@ func (r *AutoBackend) queryPTR(m *message.Message) (rs []*message.Message, err e
 		p.Content = append(p.Content, []byte(answer.Suffix)...)
 		p.Content = append(p.Content, '.')
 		p.Content = append(p.Content, []byte(answer.Zone)...)
-		rs = append(rs, p)
+		r = append(r, p)
 	}
 
-	return rs, nil
+	return
 }
 
 func (b *AutoBackend) querySOA(m *message.Message) (r []*message.Message, err error) {
@@ -335,7 +370,6 @@ func (b *AutoBackend) querySOA(m *message.Message) (r []*message.Message, err er
 	var name = string(m.Name)
 	for _, answer := range b.Answers {
 		zone := ReverseNetwork(answer.Network)
-		log.Printf("auto: %q == %q?", zone, name)
 		if zone != name {
 			continue
 		}
@@ -371,16 +405,16 @@ func isCanonicalIPv4(ip net.IP) bool {
 }
 
 func ReverseNetwork(net *net.IPNet) string {
+	size, _ := net.Mask.Size()
 	if isCanonicalIPv4(net.IP) || net.IP.To4() != nil {
-		ones, _ := net.Mask.Size()
 		switch {
-		case ones == 32:
+		case size == 32:
 			return fmt.Sprintf("%d.%d.%d.%d.in-addr.arpa", net.IP[3], net.IP[2], net.IP[1], net.IP[0])
-		case ones >= 24:
+		case size >= 24:
 			return fmt.Sprintf("%d.%d.%d.in-addr.arpa", net.IP[2], net.IP[1], net.IP[0])
-		case ones >= 16:
+		case size >= 16:
 			return fmt.Sprintf("%d.%d.in-addr.arpa", net.IP[1], net.IP[0])
-		case ones >= 8:
+		case size >= 8:
 			return fmt.Sprintf("%d.in-addr.arpa", net.IP[0])
 		default:
 			return "in-addr.arpa"
@@ -388,7 +422,6 @@ func ReverseNetwork(net *net.IPNet) string {
 	} else {
 		ip := net.IP.To16()
 		hex := []byte{}
-		fmt.Printf("ip %s (%v): %d\n", ip, []byte(ip), len(ip))
 		for i := len(ip) - 1; i >= 0; i-- {
 			v := ip[i]
 			hex = append(hex, hexDigit[v&0xf])
@@ -397,8 +430,7 @@ func ReverseNetwork(net *net.IPNet) string {
 			hex = append(hex, '.')
 		}
 
-		ones, _ := net.Mask.Size()
-		off := 32 - int(ones/4)
+		off := 32 - int(size/4)
 		return string(hex[off*2:]) + "ip6.arpa"
 	}
 }

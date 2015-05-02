@@ -161,11 +161,12 @@ func (p *Pdns) handleRequest(req *pdnsRequest) ([]*message.Message, error) {
 		return nil, errors.New("no dns request message")
 	}
 
-	messages := make([]*message.Message, 0, 16)
+	messages := make([]*message.Message, 0)
 	for _, backend := range p.backends {
 		answers, err := backend.Query(req.message)
 		if err != nil {
 			log.Printf("backend returned error: %v", err)
+			continue
 		}
 		messages = append(messages, answers...)
 	}
