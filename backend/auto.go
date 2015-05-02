@@ -1,6 +1,7 @@
 package backend
 
 import (
+	"errors"
 	"fmt"
 	"log"
 	"math/big"
@@ -14,24 +15,32 @@ import (
 	"gopkg.in/yaml.v2"
 )
 
-var typesA = map[uint16]bool{
-	dns.TypeANY: true,
-	dns.TypeA:   true,
-}
-var typesAAAA = map[uint16]bool{
-	dns.TypeANY:  true,
-	dns.TypeAAAA: true,
-}
-var typesPTR = map[uint16]bool{
-	dns.TypeANY: true,
-	dns.TypePTR: true,
-}
+const SOATemplate = "%s. hostmaster.localhost. 1 28800 7200 604800 86400"
+
+var (
+	typesA = map[uint16]bool{
+		dns.TypeANY: true,
+		dns.TypeA:   true,
+	}
+	typesAAAA = map[uint16]bool{
+		dns.TypeANY:  true,
+		dns.TypeAAAA: true,
+	}
+	typesPTR = map[uint16]bool{
+		dns.TypeANY: true,
+		dns.TypePTR: true,
+	}
+	typesSOA = map[uint16]bool{
+		dns.TypeANY: true,
+		dns.TypeSOA: true,
+	}
+)
 
 type AutoBackend struct {
 	Encode         yaml.MapSlice `yaml:"encode"`
 	Filler         bool          `yaml:"filler"`
 	Prefix, Suffix string
-	SOA            string
+	SOA            *SOA
 	DNS            []string
 	Answers        map[string]*AutoBackendAnswer
 
@@ -45,6 +54,8 @@ type AutoBackendAnswer struct {
 	Encode         yaml.MapSlice `yaml:"encode"`
 	Filler         bool          `yaml:"filler"`
 	Prefix, Suffix string
+	SOA            *SOA
+	DNS            []string
 	Version        uint8
 
 	encoders []encoder.Encoder
@@ -81,6 +92,15 @@ func loadEncoders(e yaml.MapSlice) (encoders []encoder.Encoder, err error) {
 }
 
 func (r *AutoBackend) Check() (err error) {
+	log.Println("auto: check")
+	if r.DNS == nil || len(r.DNS) == 0 {
+		return errors.New("auto: no DNS servers configured")
+	}
+	if r.SOA == nil {
+		r.SOA = NewSOA()
+		r.SOA.Source = r.DNS[0]
+	}
+	log.Printf("auto: SOA %q\n", r.SOA.String())
 	if r.Encode != nil {
 		if r.encoders, err = loadEncoders(r.Encode); err != nil {
 			return
@@ -111,30 +131,72 @@ func (r *AutoBackend) Check() (err error) {
 				return err
 			}
 		}
+		if answer.Zone == "" {
+			return fmt.Errorf("No forward zone for zone %q", zone)
+		}
 		if answer.Prefix == "" && r.Prefix != "" {
 			answer.Prefix = r.Prefix
 		}
 		if answer.Suffix == "" && r.Suffix != "" {
 			answer.Suffix = r.Suffix
 		}
+		if answer.DNS == nil {
+			answer.DNS = []string{}
+		}
+		if len(answer.DNS) == 0 {
+			for _, dns := range r.DNS {
+				answer.DNS = append(answer.DNS, dns)
+			}
+		}
+		if answer.SOA == nil {
+			answer.SOA = r.SOA.Copy()
+			answer.SOA.Source = answer.DNS[0]
+		}
+		log.Printf("auto: %s SOA %q\n", answer.Zone, answer.SOA.String())
 	}
 
 	return
 }
 
-func (r *AutoBackend) Query(m *message.Message) ([]*message.Message, error) {
+func (b *AutoBackend) Query(m *message.Message) (r []*message.Message, err error) {
 	log.Printf("auto: query for %s (%s)\n", m.Name, dns.TypeToString[m.Type])
 
+	r = make([]*message.Message, 0)
+
+	var replies []*message.Message
 	if typesA[m.Type] {
-		return r.queryA(m)
+		if replies, err = b.queryA(m); err != nil {
+			return
+		}
+		r = b.merge(r, replies)
 	}
 	if typesAAAA[m.Type] {
-		return r.queryAAAA(m)
+		if replies, err = b.queryAAAA(m); err != nil {
+			return
+		}
+		r = b.merge(r, replies)
 	}
 	if typesPTR[m.Type] {
-		return r.queryPTR(m)
+		if replies, err = b.queryPTR(m); err != nil {
+			return
+		}
+		r = b.merge(r, replies)
 	}
-	return nil, nil
+	if typesSOA[m.Type] {
+		if replies, err = b.querySOA(m); err != nil {
+			return
+		}
+		r = b.merge(r, replies)
+	}
+
+	return
+}
+
+func (b *AutoBackend) merge(r, replies []*message.Message) []*message.Message {
+	if replies != nil {
+		r = append(r, replies...)
+	}
+	return r
 }
 
 func (r *AutoBackend) queryForward(m *message.Message, accept func(ip net.IP) bool) (rs []*message.Message, err error) {
@@ -267,8 +329,37 @@ func (r *AutoBackend) queryPTR(m *message.Message) (rs []*message.Message, err e
 	return rs, nil
 }
 
+func (b *AutoBackend) querySOA(m *message.Message) (r []*message.Message, err error) {
+	r = make([]*message.Message, 0)
+
+	var name = string(m.Name)
+	for _, answer := range b.Answers {
+		zone := ReverseNetwork(answer.Network)
+		log.Printf("auto: %q == %q?", zone, name)
+		if zone != name {
+			continue
+		}
+
+		p := &message.Message{
+			Name:    m.Name,
+			Class:   dns.ClassINET,
+			Type:    dns.TypeSOA,
+			TTL:     int(answer.SOA.TTL),
+			ID:      m.ID,
+			Content: answer.SOA.Bytes(),
+		}
+		r = append(r, p)
+		break
+	}
+
+	return r, nil
+}
+
 func isCanonicalIPv4(ip net.IP) bool {
 	if ip.To16() == nil {
+		return false
+	}
+	if len(ip) == 4 {
 		return false
 	}
 	for i := 0; i < len(ip); i++ {
@@ -277,4 +368,37 @@ func isCanonicalIPv4(ip net.IP) bool {
 		}
 	}
 	return ip[10] == 0xff && ip[11] == 0xff
+}
+
+func ReverseNetwork(net *net.IPNet) string {
+	if isCanonicalIPv4(net.IP) || net.IP.To4() != nil {
+		ones, _ := net.Mask.Size()
+		switch {
+		case ones == 32:
+			return fmt.Sprintf("%d.%d.%d.%d.in-addr.arpa", net.IP[3], net.IP[2], net.IP[1], net.IP[0])
+		case ones >= 24:
+			return fmt.Sprintf("%d.%d.%d.in-addr.arpa", net.IP[2], net.IP[1], net.IP[0])
+		case ones >= 16:
+			return fmt.Sprintf("%d.%d.in-addr.arpa", net.IP[1], net.IP[0])
+		case ones >= 8:
+			return fmt.Sprintf("%d.in-addr.arpa", net.IP[0])
+		default:
+			return "in-addr.arpa"
+		}
+	} else {
+		ip := net.IP.To16()
+		hex := []byte{}
+		fmt.Printf("ip %s (%v): %d\n", ip, []byte(ip), len(ip))
+		for i := len(ip) - 1; i >= 0; i-- {
+			v := ip[i]
+			hex = append(hex, hexDigit[v&0xf])
+			hex = append(hex, '.')
+			hex = append(hex, hexDigit[v>>4])
+			hex = append(hex, '.')
+		}
+
+		ones, _ := net.Mask.Size()
+		off := 32 - int(ones/4)
+		return string(hex[off*2:]) + "ip6.arpa"
+	}
 }

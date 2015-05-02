@@ -39,7 +39,9 @@ backend:
       filler: true
       prefix: "node-"
       suffix: ""
-      soa: "dns1.maze.io systems-dns.maze.io 86400 7200 604800 60"
+      soa:
+        source: dns1.maze.io
+        contact: systems-dns.maze.io
       dns:
       - dns1.maze.io
       - dns2.maze.io

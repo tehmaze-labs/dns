@@ -21,6 +21,7 @@ var (
 	HELLO_REPLY         = "OK\tdns-pdns\n"
 	END_REPLY           = "END\n"
 	FAIL_REPLY          = "FAIL\n"
+	NL                  = []byte("\n")
 )
 
 const (
