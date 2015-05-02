@@ -95,23 +95,23 @@ func loadEncoders(e yaml.MapSlice) (encoders []encoder.Encoder, err error) {
 	return
 }
 
-func (r *AutoBackend) Check() (err error) {
+func (b *AutoBackend) Check() (err error) {
 	log.Println("auto: check")
-	if r.DNS == nil || len(r.DNS) == 0 {
+	if b.DNS == nil || len(b.DNS) == 0 {
 		return errors.New("auto: no DNS servers configured")
 	}
-	if r.SOA == nil {
-		r.SOA = NewSOA()
-		r.SOA.Source = r.DNS[0]
+	if b.SOA == nil {
+		b.SOA = NewSOA()
+		b.SOA.Source = b.DNS[0]
 	}
-	log.Printf("auto: SOA %q\n", r.SOA.String())
-	if r.Encode != nil {
-		if r.encoders, err = loadEncoders(r.Encode); err != nil {
+	log.Printf("auto: SOA %q\n", b.SOA.String())
+	if b.Encode != nil {
+		if b.encoders, err = loadEncoders(b.Encode); err != nil {
 			return
 		}
 	}
 
-	for zone, answer := range r.Answers {
+	for zone, answer := range b.Answers {
 		_, answer.Network, err = net.ParseCIDR(zone)
 		if err != nil {
 			return err
@@ -123,11 +123,11 @@ func (r *AutoBackend) Check() (err error) {
 			answer.Size = ones
 		}
 		if answer.Encode == nil {
-			if r.encoders == nil {
+			if b.encoders == nil {
 				return fmt.Errorf("No encoders for zone %q and no default", zone)
 			}
 			log.Printf("auto: using default encoders for zone %q", zone)
-			for _, e := range r.encoders {
+			for _, e := range b.encoders {
 				answer.encoders = append(answer.encoders, e)
 			}
 		} else {
@@ -138,22 +138,22 @@ func (r *AutoBackend) Check() (err error) {
 		if answer.Zone == "" {
 			return fmt.Errorf("No forward zone for zone %q", zone)
 		}
-		if answer.Prefix == "" && r.Prefix != "" {
-			answer.Prefix = r.Prefix
+		if answer.Prefix == "" && b.Prefix != "" {
+			answer.Prefix = b.Prefix
 		}
-		if answer.Suffix == "" && r.Suffix != "" {
-			answer.Suffix = r.Suffix
+		if answer.Suffix == "" && b.Suffix != "" {
+			answer.Suffix = b.Suffix
 		}
 		if answer.DNS == nil {
 			answer.DNS = []string{}
 		}
 		if len(answer.DNS) == 0 {
-			for _, dns := range r.DNS {
+			for _, dns := range b.DNS {
 				answer.DNS = append(answer.DNS, dns)
 			}
 		}
 		if answer.SOA == nil {
-			answer.SOA = r.SOA.Copy()
+			answer.SOA = b.SOA.Copy()
 			answer.SOA.Source = answer.DNS[0]
 		}
 		log.Printf("auto: %s SOA %q\n", answer.Zone, answer.SOA.String())

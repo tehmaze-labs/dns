@@ -29,24 +29,24 @@ type GeoBackend struct {
 	geoIP *geoip2.Reader
 }
 
-func (r *GeoBackend) Check() (err error) {
-	r.geoIP, err = geoip2.Open(r.Options.Database)
-	if err != nil || r.geoIP == nil {
-		return fmt.Errorf("error reading GeoIP datbases %q: %v", r.Options.Database, err)
+func (b *GeoBackend) Check() (err error) {
+	b.geoIP, err = geoip2.Open(b.Options.Database)
+	if err != nil || b.geoIP == nil {
+		return fmt.Errorf("error reading GeoIP datbases %q: %v", b.Options.Database, err)
 	}
 
 	// Normalize
-	for n, zn := range r.Zones {
-		r.Zones[n] = strings.ToLower(zn)
+	for n, zn := range b.Zones {
+		b.Zones[n] = strings.ToLower(zn)
 	}
 
-	r.Options.Default.Continent = strings.ToUpper(r.Options.Default.Continent)
-	r.Options.Default.Country = strings.ToUpper(r.Options.Default.Country)
+	b.Options.Default.Continent = strings.ToUpper(b.Options.Default.Continent)
+	b.Options.Default.Country = strings.ToUpper(b.Options.Default.Country)
 
-	if err = r.checkAnswers(r.Options.Answers.Continent); err != nil {
+	if err = b.checkAnswers(b.Options.Answers.Continent); err != nil {
 		return
 	}
-	if err = r.checkAnswers(r.Options.Answers.Country); err != nil {
+	if err = b.checkAnswers(b.Options.Answers.Country); err != nil {
 		return
 	}
 
@@ -81,8 +81,8 @@ func (r *GeoBackend) checkAnswers(answers map[string][]*Record) (err error) {
 	return
 }
 
-func (r *GeoBackend) Query(m *message.Message) (a []*message.Message, err error) {
-	if !stringInSlice(strings.ToLower(string(m.Name)), r.Zones) {
+func (b *GeoBackend) Query(m *message.Message) (r []*message.Message, err error) {
+	if !stringInSlice(strings.ToLower(string(m.Name)), b.Zones) {
 		return nil, nil
 	}
 
@@ -99,7 +99,7 @@ func (r *GeoBackend) Query(m *message.Message) (a []*message.Message, err error)
 
 	var cc, cn, co string
 
-	gi, err := r.geoIP.Country(m.RemoteAddr)
+	gi, err := b.geoIP.Country(m.RemoteAddr)
 	if err == nil {
 		cc = gi.Country.IsoCode
 		cn = gi.Country.Names["en"]
@@ -109,21 +109,21 @@ func (r *GeoBackend) Query(m *message.Message) (a []*message.Message, err error)
 	if cc == "" {
 		cc = "XX"
 		cn = "Unknown"
-		if r.Options.Default.Continent != "" {
-			co = r.Options.Default.Continent
+		if b.Options.Default.Continent != "" {
+			co = b.Options.Default.Continent
 		} else {
 			co = "EU"
 		}
-		if r.Options.Default.Country != "" {
-			cc = r.Options.Default.Country
+		if b.Options.Default.Country != "" {
+			cc = b.Options.Default.Country
 		} else {
 			cc = "XX"
 		}
 	}
 
-	a = make([]*message.Message, 0)
+	r = make([]*message.Message, 0)
 	if qtypes[dns.TypeTXT] {
-		a = append(a, &message.Message{
+		r = append(r, &message.Message{
 			Name:    m.Name,
 			Class:   dns.ClassINET,
 			Type:    dns.TypeTXT,
@@ -134,12 +134,12 @@ func (r *GeoBackend) Query(m *message.Message) (a []*message.Message, err error)
 
 	var records []*Record
 
-	if answers, ok := r.Options.Answers.Continent[co]; ok {
+	if answers, ok := b.Options.Answers.Continent[co]; ok {
 		for _, answer := range answers {
 			records = append(records, answer)
 		}
 	}
-	if answers, ok := r.Options.Answers.Country[cc]; ok {
+	if answers, ok := b.Options.Answers.Country[cc]; ok {
 		for _, answer := range answers {
 			records = append(records, answer)
 		}
@@ -150,15 +150,15 @@ func (r *GeoBackend) Query(m *message.Message) (a []*message.Message, err error)
 			continue
 		}
 
-		rm, err := record.Message()
+		p, err := record.Message()
 		if err != nil {
 			log.Printf("bogus record: %v", err)
 			continue
 		}
 
-		rm.Name = m.Name
-		rm.ID = m.ID
-		a = append(a, rm)
+		p.Name = m.Name
+		p.ID = m.ID
+		r = append(r, p)
 	}
 
 	return
