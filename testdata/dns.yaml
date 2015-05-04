@@ -1,4 +1,7 @@
 ---
+options:
+  syslog: daemon
+
 templates:
   geo_eu: &geo_eu
   - {type: "A",    ttl: 60,   content: "82.139.110.195"}
