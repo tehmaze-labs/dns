@@ -15,7 +15,7 @@ override_dh_auto_build:
 	go get -v github.com/miekg/dns
 	go get -v gopkg.in/yaml.v2
 	go get -v github.com/oschwald/geoip2-golang
-	go build -v $(DH_GOPKG)/...
+	go install -v $(DH_GOPKG)/...
 
 override_dh_auto_install:
 	dh_auto_install
