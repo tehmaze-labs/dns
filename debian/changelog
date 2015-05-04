@@ -1,3 +1,15 @@
+maze-dns (0.1.1) unstable; urgency=medium
+
+  [ Maze Modderman-Lenstra ]
+  * encoder: bug fixes and unittests
+  * geo: enable GeoBackend
+  * dns: pdns-pipe package contains binary
+  * auto: SOA generation
+  * auto: support NS record type
+  * backend: consistent variable naming
+
+ -- maze.io apt signing key <systems-apt@maze.io>  Mon, 04 May 2015 09:40:38 +0200
+
 maze-dns (0.1) unstable; urgency=medium
 
   * Initial release.
